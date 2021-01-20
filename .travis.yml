@@ -28,6 +28,8 @@ jobs:
       env: P=manylinux2014_x86_64 A=cp37m
     - arch: amd64
       env: P=manylinux2014_x86_64 A=cp38
+    - arch: amd64
+      env: P=manylinux2014_x86_64 A=cp39
     # manylinux2014_i686
     - arch: amd64
       env: P=manylinux2014_i686 A=cp35m
@@ -37,6 +39,8 @@ jobs:
       env: P=manylinux2014_i686 A=cp37m
     - arch: amd64
       env: P=manylinux2014_i686 A=cp38
+    - arch: amd64
+      env: P=manylinux2014_i686 A=cp39
     # linux_x86_64
     - arch: amd64
       env: P=linux_x86_64 A=cp34m
@@ -48,6 +52,8 @@ jobs:
       env: P=linux_x86_64 A=cp37m
     - arch: amd64
       env: P=linux_x86_64 A=cp38
+    - arch: amd64
+      env: P=linux_x86_64 A=cp39
     # linux_i686
     - arch: amd64
       env: P=linux_i686 A=cp34m
@@ -59,6 +65,8 @@ jobs:
       env: P=linux_i686 A=cp37m
     - arch: amd64
       env: P=linux_i686 A=cp38
+    - arch: amd64
+      env: P=linux_i686 A=cp39
     # linux_armv7l
     # armv7l is still build using qemu on x86, because it was not easily possible to build for armv7l (The best was armv8l using linux32 wrapper)
     # The tests are disabled for armv7l because installing the required numpy took too long and we hit the maximum allowed travis build time.
@@ -72,6 +80,8 @@ jobs:
       env: P=linux_armv7l A=cp37m ARGS="--disable-tests"
     - arch: amd64
       env: P=linux_armv7l A=cp38 ARGS="--disable-tests"
+    - arch: amd64
+      env: P=linux_armv7l A=cp39 ARGS="--disable-tests"
     # linux_aarch64
     - arch: arm64
       env: P=linux_aarch64 A=cp34m
@@ -83,6 +93,8 @@ jobs:
       env: P=linux_aarch64 A=cp37m
     - arch: arm64
       env: P=linux_aarch64 A=cp38
+    - arch: arm64
+      env: P=linux_aarch64 A=cp39
   allow_failures:
     # manylinux fails, because the runtime dependencies of current pylon are higher than manylinux2014.
     # The jobs are still kept in here to keep the mechanics alive.
@@ -95,6 +107,8 @@ jobs:
       env: P=manylinux2014_x86_64 A=cp37m
     - arch: amd64
       env: P=manylinux2014_x86_64 A=cp38
+    - arch: amd64
+      env: P=manylinux2014_x86_64 A=cp39
     # manylinux2014_i686
     - arch: amd64
       env: P=manylinux2014_i686 A=cp35m
@@ -104,6 +118,8 @@ jobs:
       env: P=manylinux2014_i686 A=cp37m
     - arch: amd64
       env: P=manylinux2014_i686 A=cp38
+    - arch: amd64
+      env: P=manylinux2014_i686 A=cp39
 
 
 install:
