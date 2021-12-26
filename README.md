@@ -79,6 +79,7 @@ The following versions are available on pypi:
     This is roughly equivalent to a minimum glibc version >= 2.24.  
     :warning: You need at least pip 20.3 to install them.
 > * (***) MacOS binaries are built for macOS >= 10.14 (Mojave)  
+> * GetArrayZeroCopy only available on cpython for now
 
 ## Installation from Source
 Building the pypylon bindings is supported and tested on Windows and Linux.

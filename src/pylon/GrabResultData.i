@@ -66,7 +66,7 @@
     int GetNumBufferExports(PyObject * omv)
     {
 // need at least Python 3.3 for memory view
-%#if PY_VERSION_HEX >= 0x03030000
+%#if PY_VERSION_HEX >= 0x03030000 && ! defined(PYPY_VERSION_NUM)
         PyMemoryViewObject * mv = (PyMemoryViewObject *) omv;
         int ret = (int) mv->mbuf->exports;
         Py_DECREF(omv);
