@@ -112,6 +112,7 @@ class BuildSupport(object):
         "camemu",
         "gentl",
         "extra",
+        "cl",
         "pylondataprocessing",
         }
 
@@ -464,6 +465,12 @@ class BuildSupportWindows(BuildSupport):
         "gentl": [
             ("PylonGtc_*.dll", ""),
             ],
+        "cl": [
+            ("CLAllSerial_*.dll", ""),
+            ("CLProtocol_*.dll", ""),
+            ("CLSerCOM.dll", ""),
+            ("PylonCLSer_*.dll", ""),
+        ]
         }
 
     PYLON_DATA_PROCESSING_VTOOLS_DIR = "pylonDataProcessingPlugins"
@@ -596,6 +603,22 @@ class BuildSupportWindows(BuildSupport):
             if not wow:
                 os_bits = 32
         tgt_bits = get_machinewidth()
+
+        # copy basler cl protocol adapters
+        if 'cl' in self.RuntimeDefaultDeploy:
+            src = os.path.join(
+                self.PylonDevDir,
+                "..",
+                "runtime",
+                "clprotocol",
+                {"x64":"Win64_x64","Win32":"Win32_i86"}[self.BinPath],
+                "*.dll"
+                )
+            dst = os.path.abspath(self.PackageDir)
+            for f in glob.glob(src):
+                    print("Copy %s => %s" % (f, dst))
+                    shutil.copy(f, dst)
+
 
         # Copy msvc runtime for pylon
         runtime_dlls = ["vcruntime140.dll", "msvcp140.dll"]
