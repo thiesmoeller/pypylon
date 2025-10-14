@@ -2,6 +2,7 @@ from pylongigetestcase import PylonTestCase
 from pypylon import pylon
 import unittest
 import tempfile
+import os
 
 
 class LoadAndSaveTestSuite(PylonTestCase):
@@ -15,8 +16,13 @@ class LoadAndSaveTestSuite(PylonTestCase):
         # featurePersistence = pylon.FeaturePersistence()
 
         # Use a temporary file that will be automatically deleted
-        with tempfile.NamedTemporaryFile(suffix='.pfs', delete=True) as temp_file:
-            nodeFile = temp_file.name
+        # Note: On Windows, NamedTemporaryFile keeps the file open, which prevents
+        # pylon from opening it. We use delete=False and manually clean up instead.
+        temp_file = tempfile.NamedTemporaryFile(suffix='.pfs', delete=False)
+        nodeFile = temp_file.name
+        temp_file.close()  # Close it so pylon can open it
+        
+        try:
             print("Saving camera's node map to file...")
             print(nodeFile)
 
@@ -26,6 +32,12 @@ class LoadAndSaveTestSuite(PylonTestCase):
             # Just for demonstration, read the content of the file back to the camera's node map with enabled validation.
             print("Reading file back to camera's node map...")
             pylon.FeaturePersistence.Load(nodeFile, camera.GetNodeMap(), True)
+        finally:
+            # Clean up the temporary file
+            try:
+                os.unlink(nodeFile)
+            except Exception:
+                pass
         
         # Close the camera.
         camera.Close()
