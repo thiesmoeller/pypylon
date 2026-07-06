@@ -43,7 +43,7 @@
     PyObject* AttachMemoryView(PyObject* object, Pylon::EPixelType pixelType, unsigned int width, unsigned int height, size_t paddingX) {
 %#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x030b0000
         Py_buffer buffer;
-        if (PyObject_GetBuffer(memoryView, &buffer, PyBUF_SIMPLE) == -1) {
+        if (PyObject_GetBuffer(object, &buffer, PyBUF_SIMPLE) == -1) {
             PyErr_SetString(PyExc_RuntimeError, "Expected a buffer-compatible object");
             Py_RETURN_FALSE;
         }
@@ -96,7 +96,9 @@
     def AttachBytesObject(self, object, pixelType, width, height, paddingX):
         if not isinstance(object, bytes):
             raise RuntimeError("Expected a bytes-compatible object")
-        return _pylon.PylonImage_AttachBytesObject(self, object, pixelType, width, height, paddingX)
+        result = _pylon.PylonImage_AttachBytesObject(self, object, pixelType, width, height, paddingX)
+        self._bytes_object = object
+        return result
 
     GetImageFormat = needs_numpy(_image_get_image_format)
 

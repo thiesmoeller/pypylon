@@ -412,6 +412,14 @@ class PylonImageTestSuite(PylonEmuTestCase):
         self.assertEqual(image.GetBuffer()[0], pixel_data[0])
         self.assertEqual(image.GetBuffer()[64 * 48 - 1], pixel_data[64 * 48 - 1])
 
+    def test_attach_bytes_object_keeps_buffer_owner_alive(self):
+        """AttachBytesObject() keeps the attached bytes object alive with the image."""
+        pixel_data = bytes([i % 256 for i in range(64 * 48)])
+        image = pylon.PylonImage()
+        image.AttachBytesObject(pixel_data, pylon.PixelType_Mono8, 64, 48, 0)
+        self.assertIs(image._bytes_object, pixel_data)
+        self.assertEqual(image.GetBuffer()[123], pixel_data[123])
+
     def test_attach_bytes_object_rejects_non_bytes_argument(self):
         """AttachBytesObject() raises RuntimeError when passed a non-bytes object."""
         image = pylon.PylonImage()
