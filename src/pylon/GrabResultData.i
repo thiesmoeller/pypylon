@@ -49,32 +49,20 @@
 
     PyObject * GetMemoryView()
     {
-// need at least Python 3.3 for memory view
-%#if PY_VERSION_HEX >= 0x03030000
         return PyMemoryView_FromMemory(
             (char*)$self->GetBuffer(),
             $self->GetPayloadSize(),
             PyBUF_WRITE
             );
-%#else
-        PyErr_SetString(PyExc_RuntimeError, "memory view not available");
-        return NULL;
-%#endif
     }
 
     PyObject * GetImageMemoryView()
     {
-// need at least Python 3.3 for memory view
-%#if PY_VERSION_HEX >= 0x03030000
         return PyMemoryView_FromMemory(
             (char*)$self->GetBuffer(),
             $self->GetImageSize(),
             PyBUF_WRITE
             );
-%#else
-        PyErr_SetString(PyExc_RuntimeError, "memory view not available");
-        return NULL;
-%#endif
     }
 
     // Access to get data components overloaded methods

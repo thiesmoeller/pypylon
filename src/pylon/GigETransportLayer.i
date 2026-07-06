@@ -172,7 +172,7 @@
 %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER, numinputs=1)
 (uint32_t *pNumResults, Pylon::GigEActionCommandResult *results)
 {
-    $1 = PyInt_Check($input) ? 1 : 0;
+    $1 = PyLong_Check($input) ? 1 : 0;
 }
 
 %typemap(arginit, noblock=1)
@@ -209,17 +209,31 @@
 {
     uint32_t cnt = *$1;
     PyObject *cmd_res = PyTuple_New(cnt);
+    if (!cmd_res) {
+        SWIG_fail;
+    }
     for (uint32_t i = 0; i < cnt; i++)
     {
-        PyObject *address = PyString_FromString($2[i].DeviceAddress);
-        PyObject *status = PyInt_FromLong($2[i].Status);
+        PyObject *address = PyUnicode_FromString($2[i].DeviceAddress);
+        PyObject *status = PyLong_FromLong($2[i].Status);
         PyObject *sgl_res = PyTuple_New(2);
+        if (!address || !status || !sgl_res) {
+            Py_XDECREF(address);
+            Py_XDECREF(status);
+            Py_XDECREF(sgl_res);
+            Py_DECREF(cmd_res);
+            SWIG_fail;
+        }
         PyTuple_SetItem(sgl_res, 0, address);
         PyTuple_SetItem(sgl_res, 1, status);
         PyTuple_SetItem(cmd_res, i, sgl_res);
     }
 
     PyObject *tpl = PyTuple_New(2);
+    if (!tpl) {
+        Py_DECREF(cmd_res);
+        SWIG_fail;
+    }
     PyTuple_SetItem(tpl, 0, $result);
     PyTuple_SetItem(tpl, 1, cmd_res);
     $result = tpl;
@@ -385,4 +399,3 @@
 (uint32_t *pNumResults, Pylon::GigEActionCommandResult *results);
 %typemap(argout)
 (uint32_t *pNumResults, Pylon::GigEActionCommandResult *results);
-

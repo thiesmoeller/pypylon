@@ -27,22 +27,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 %module(directors="1", package="pypylon", docstring=PYLONDP_DOCSTRING) pylondataprocessing
 %include "DoxyPylonDataProcessing.i";
+%include "../common/PythonCompatibility.i"
 %begin %{
-
-#ifdef Py_LIMITED_API
-#include <stdlib.h> // malloc / free
-// Although PyMemoryView_FromMemory has been part of limited API since
-// version 3.3, the flags PyBUF_READ and PyBUF_WRITE, which are needed to use
-// this function, are not defined in newer Python headers unless Py_LIMITED_API
-// is set to >= 3.11. Since this is obviously a bug, we need the following
-// workarond:
-#ifndef PyBUF_READ
-#define PyBUF_READ  0x100
-#endif
-#ifndef PyBUF_WRITE
-#define PyBUF_WRITE 0x200
-#endif
-#endif
 
 // allow debug builds of genicam wrapper against release build of python
 # ifdef _DEBUG
@@ -262,11 +248,7 @@ void TranslateGenicamException(const GenericException* e)
     }
     if (!_genicam_translate)
     {
-        # if PY_VERSION_HEX >= 0x03000000
         return NULL;
-        # else
-        return;
-        # endif
     }
 %}
 
@@ -332,78 +314,8 @@ def needs_numpy(func):
   $1 = PyBool_Check($input);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//
-// Buffer access
-//
-
-%typemap(in,noblock=1,numinputs=0, noblock=1)
-( void **buf_mem, size_t *length)
-($*1_ltype temp = 0, $*2_ltype tempn) {
-  $1 = &temp;
-  $2 = &tempn;
-}
-%typemap(freearg,match="in", noblock=1) (void **buf_mem, size_t *length) "";
-
-%typemap(argout, noblock=1) (void ** buf_mem, size_t *length) {
-  if (*$1) {
-    %append_output(PyByteArray_FromStringAndSize(
-        (const char *)*$1, %numeric_cast(*$2, int))
-        );
-  }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-//
-// String vector input (for XML injection)
-//
-
-// Check typemap to make the overload working with python lists
-%typemap(typecheck,precedence=SWIG_TYPECHECK_STRING_ARRAY)
-const Pylon::StringList_t &
-{
-    // We need a list
-    $1 = PyList_Check($input) ? 1 : 0;
-}
-
-// Convert a python string list into a StringList_t
-%typemap(in, numinputs=1)
-const Pylon::StringList_t & (Pylon::StringList_t str_list)
-{
-    if (PyList_Check($input)) {
-        Py_ssize_t size = PyList_Size($input);
-        str_list.resize(size);
-        Py_ssize_t i = 0;
-        for (i = 0; i < size; i++) {
-            PyObject *o = PyList_GetItem($input,i);
-            if (PyBytes_Check(o)) {
-                str_list[i] = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(o));
-            } else
-%#if PY_VERSION_HEX >= 0x03000000
-            if(PyUnicode_Check(o)) {
-                PyObject *utf8 = PyUnicode_AsUTF8String(o);
-                str_list[i] = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(utf8));
-                Py_DECREF(utf8);
-            }
-%#else
-            if(PyString_Check(o)) {
-                str_list[i] = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(o));
-            }
-%#endif
-            else {
-                PyErr_SetString(PyExc_TypeError,"list must contain strings");
-                SWIG_fail;
-            }
-        }
-        $1 = &str_list;
-    } else {
-        PyErr_SetString(PyExc_TypeError,"not a list");
-        SWIG_fail;
-    }
-}
-
-// Make sure the above typemap is no applied on const references
-%typemap(argout, noblock=1) const StringList_t & {}
+%include "../common/PylonBufferTypemaps.i"
+%include "../common/PylonStringListTypemaps.i"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -434,19 +346,14 @@ Pylon::DataProcessing::CVariantContainer value
 
             if (PyBytes_Check(key)) {
                 keyCpp = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(key));
-            } else
-%#if PY_VERSION_HEX >= 0x03000000
-            if(PyUnicode_Check(key)) {
+            } else if(PyUnicode_Check(key)) {
                 PyObject *utf8 = PyUnicode_AsUTF8String(key);
+                if (!utf8) {
+                    SWIG_fail;
+                }
                 keyCpp = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(utf8));
                 Py_DECREF(utf8);
-            }
-%#else
-            if(PyString_Check(key)) {
-                keyCpp = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(key));
-            }
-%#endif
-            else {
+            } else {
                 PyErr_SetString(PyExc_ValueError, "Expected a string as key.");
                 SWIG_fail;
             }

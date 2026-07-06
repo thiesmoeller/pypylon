@@ -119,13 +119,16 @@ namespace GENAPI_NAMESPACE
                     };
                     SWIG_PYTHON_THREAD_BEGIN_BLOCK;
                     node = SWIG_NewPointerObj(outptr, outtype, 0 );
-                    arglist = Py_BuildValue("(O)", node);
+                    if (!node) {
+                        Swig::DirectorException::raise("error in callback");
+                    }
+                    arglist = PyTuple_Pack(1, node);
+                    Py_DECREF(node);
+                    if (!arglist) {
+                        Swig::DirectorException::raise("error in callback");
+                    }
 
-                    #if PY_VERSION_HEX < 0x03090000
-                        result = PyEval_CallObject(m_pyfunc, arglist);
-                    #else
-                        result = PyObject_Call(m_pyfunc, arglist, NULL);
-                    #endif
+                    result = PyObject_Call(m_pyfunc, arglist, NULL);
                     Py_DECREF(arglist);
 
                     if (!result){

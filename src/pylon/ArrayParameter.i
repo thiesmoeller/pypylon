@@ -40,7 +40,7 @@
 }
 %typemap(typecheck, precedence=SWIG_TYPECHECK_CHAR) (uint8_t* pBuffer, int64_t Length)
 {
-    $1 = (PyLong_Check($input) || PyInt_Check($input)) ? 1 : 0;
+    $1 = PyLong_Check($input) ? 1 : 0;
 }
 
 %rename (ArrayParameter) Pylon::CArrayParameter;

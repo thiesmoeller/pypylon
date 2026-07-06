@@ -27,22 +27,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 %module(directors="1", package="pypylon", docstring=GENICAM_DOCSTRING) genicam
 %include "DoxyGenApi.i";
+%include "../common/PythonCompatibility.i"
 %begin %{
-
-#ifdef Py_LIMITED_API
-#include <stdlib.h> // malloc / free
-// Although PyMemoryView_FromMemory has been part of limited API since
-// version 3.3, the flags PyBUF_READ and PyBUF_WRITE, which are needed to use
-// this function, are not defined in newer Python headers unless Py_LIMITED_API
-// is set to >= 3.11. Since this is obviously a bug, we need the following
-// workarond:
-#ifndef PyBUF_READ
-#define PyBUF_READ  0x100
-#endif
-#ifndef PyBUF_WRITE
-#define PyBUF_WRITE 0x200
-#endif
-#endif
 
 // allow debug builds of genicam wrapper against release build of python
 # ifdef _DEBUG
@@ -320,7 +306,6 @@ import warnings
 %define %pybuffer_binary_input(TYPEMAP, SIZE)
 %typemap(in, noblock=1) (TYPEMAP, SIZE)
 {
-%#if PY_VERSION_HEX >= 0x03000000
     int get_buf_res;
     Py_ssize_t len;
     char *buf;
@@ -332,21 +317,6 @@ import warnings
     }
     $1 = ($1_ltype) buf;
     $2 = ($2_ltype) len;
-%#else
-    Py_ssize_t size;
-    const void *buf;
-    int get_buf_res;
-    size = 0;
-    buf = 0;
-    get_buf_res = PyObject_AsReadBuffer($input, &buf, &size);
-    if (get_buf_res < 0)
-    {
-        PyErr_Clear();
-        %argument_fail(get_buf_res, "(TYPEMAP, SIZE)", $symname, $argnum);
-    }
-    $1 = ($1_ltype) buf;
-    $2 = ($2_ltype) (size);
-%#endif
 }
 %typemap(freearg, noblock=1) (TYPEMAP, SIZE)
 {
@@ -374,36 +344,27 @@ import warnings
 
 %typemap(typecheck,precedence=SWIG_TYPECHECK_CHAR) (uint8_t* pBuffer, int64_t Length) ,(void* pBuffer, int64_t Length)
 {
-    $1 = ( PyLong_Check($input) || PyInt_Check($input) )? 1 : 0;
+    $1 = PyLong_Check($input) ? 1 : 0;
 }
 
 
 
 namespace GENICAM_NAMESPACE {
 %typemap(out) GENICAM_NAMESPACE::gcstring {
-%#if PY_VERSION_HEX >= 0x03000000
     $result = PyUnicode_FromStringAndSize($1.c_str(),$1.length());
-%#else
-    $result = PyString_FromStringAndSize($1.c_str(),$1.length());
-%#endif
 }
 
 %typemap(in) GENICAM_NAMESPACE::gcstring {
     if (PyBytes_Check($input)) {
         $1 = GENICAM_NAMESPACE::gcstring(PyBytes_AsString($input));
-    } else
-%#if PY_VERSION_HEX >= 0x03000000
-    if(PyUnicode_Check($input)) {
+    } else if(PyUnicode_Check($input)) {
         PyObject *utf8 = PyUnicode_AsUTF8String($input);
+        if (!utf8) {
+            SWIG_fail;
+        }
         $1 = GENICAM_NAMESPACE::gcstring(PyBytes_AsString(utf8));
         Py_DECREF(utf8);
-    }
-%#else
-    if(PyString_Check($input)) {
-        $1 = GENICAM_NAMESPACE::gcstring(PyBytes_AsString($input));
-    }
-%#endif
-    else {
+    } else {
         PyErr_SetString(PyExc_ValueError,"Expected a string");
         SWIG_fail;
     }
@@ -412,19 +373,14 @@ namespace GENICAM_NAMESPACE {
 %typemap(in) const GENICAM_NAMESPACE::gcstring & {
     if (PyBytes_Check($input)) {
         $1 = new GENICAM_NAMESPACE::gcstring(PyBytes_AsString($input));
-    } else
-%#if PY_VERSION_HEX >= 0x03000000
-    if(PyUnicode_Check($input)) {
+    } else if(PyUnicode_Check($input)) {
         PyObject *utf8 = PyUnicode_AsUTF8String($input);
+        if (!utf8) {
+            SWIG_fail;
+        }
         $1 = new GENICAM_NAMESPACE::gcstring(PyBytes_AsString(utf8));
         Py_DECREF(utf8);
-    }
-%#else
-    if(PyString_Check($input)) {
-        $1 = new GENICAM_NAMESPACE::gcstring(PyBytes_AsString($input));
-    }
-%#endif
-    else {
+    } else {
         PyErr_SetString(PyExc_ValueError,"Expected a string");
         SWIG_fail;
     }
@@ -442,11 +398,7 @@ namespace GENICAM_NAMESPACE {
 // Make sure the non-const typemap below will not match the const params
 %typemap(argout) const GENICAM_NAMESPACE::gcstring & {}
 %typemap(argout) GENICAM_NAMESPACE::gcstring & {
-%#if PY_VERSION_HEX >= 0x03000000
     $result = SWIG_AppendOutput($result,PyUnicode_FromStringAndSize($1->c_str(),$1->length()));
-%#else
-    $result = SWIG_AppendOutput($result,PyString_FromStringAndSize($1->c_str(),$1->length()));
-%#endif
 }
 
 %typemap(freearg) GENICAM_NAMESPACE::gcstring & {
@@ -658,11 +610,7 @@ namespace GENICAM_NAMESPACE {
     PyObject *o = PyTuple_New($1->size());
     for( unsigned int i = 0; i < $1->size(); i++){
       PyObject *o_item;
-%#if PY_VERSION_HEX >= 0x03000000
       o_item = PyUnicode_FromStringAndSize((*$1)[i].c_str(),(*$1)[i].length());
-%#else
-      o_item = PyString_FromStringAndSize((*$1)[i].c_str(),(*$1)[i].length());
-%#endif
       PyTuple_SetItem(o,i,o_item);
     }
     $result = SWIG_AppendOutput($result,o);
@@ -682,20 +630,42 @@ namespace GENICAM_NAMESPACE {
 // map a list of SingleChunkData_t elements to c++ array
 %typecheck(SWIG_TYPECHECK_POINTER) (GENAPI_NAMESPACE::SingleChunkData_t *ChunkData, int64_t NumChunks)
 {
-    void *check_data;
-    $1 = (  PySequence_Check($input)
-        && (PySequence_Length($input) > 0)
-        && (SWIG_IsOK(SWIG_ConvertPtr(PySequence_GetItem($input,0),&check_data,SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkData_t, 0 )))
-    )? 1 : 0;
+    $1 = 0;
+    if (PySequence_Check($input)) {
+        Py_ssize_t length = PySequence_Length($input);
+        if (length > 0) {
+            PyObject *first = PySequence_GetItem($input, 0);
+            if (first) {
+                void *check_data = 0;
+                $1 = SWIG_IsOK(SWIG_ConvertPtr(first, &check_data, SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkData_t, 0)) ? 1 : 0;
+                Py_DECREF(first);
+            } else {
+                PyErr_Clear();
+            }
+        } else if (length < 0) {
+            PyErr_Clear();
+        }
+    }
 }
 
 %typecheck(SWIG_TYPECHECK_POINTER) (GENAPI_NAMESPACE::SingleChunkDataStr_t *ChunkData, int64_t NumChunks)
 {
-    void *check_data_str;
-    $1 = (  PySequence_Check($input)
-        && (PySequence_Length($input) > 0)
-        && (SWIG_IsOK(SWIG_ConvertPtr(PySequence_GetItem($input,0),&check_data_str,SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkDataStr_t, 0 )))
-    )? 1 : 0;
+    $1 = 0;
+    if (PySequence_Check($input)) {
+        Py_ssize_t length = PySequence_Length($input);
+        if (length > 0) {
+            PyObject *first = PySequence_GetItem($input, 0);
+            if (first) {
+                void *check_data_str = 0;
+                $1 = SWIG_IsOK(SWIG_ConvertPtr(first, &check_data_str, SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkDataStr_t, 0)) ? 1 : 0;
+                Py_DECREF(first);
+            } else {
+                PyErr_Clear();
+            }
+        } else if (length < 0) {
+            PyErr_Clear();
+        }
+    }
 }
 
 %typemap(in) (GENAPI_NAMESPACE::SingleChunkData_t *ChunkData, int64_t NumChunks) {
@@ -703,13 +673,25 @@ namespace GENICAM_NAMESPACE {
         PyErr_SetString(PyExc_TypeError,"Expecting a sequence");
         SWIG_fail;
     }
-    $1 = new GENAPI_NAMESPACE::SingleChunkData_t[PySequence_Length($input)];
-    $2 = PySequence_Length($input);
-    for (int i =0; i < PySequence_Length($input); i++) {
+    Py_ssize_t length = PySequence_Length($input);
+    if (length < 0) {
+        SWIG_fail;
+    }
+    $1 = new GENAPI_NAMESPACE::SingleChunkData_t[length];
+    $2 = length;
+    for (Py_ssize_t i = 0; i < length; i++) {
         PyObject *o = PySequence_GetItem($input,i);
-        // TODO: add more checking code here
-        void *item = 0 ;
-        SWIG_ConvertPtr(o, &item,SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkData_t, 0 );
+        if (!o) {
+            delete[] $1;
+            SWIG_fail;
+        }
+        void *item = 0;
+        if (!SWIG_IsOK(SWIG_ConvertPtr(o, &item, SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkData_t, 0)) || !item) {
+            Py_DECREF(o);
+            delete[] $1;
+            PyErr_SetString(PyExc_TypeError, "sequence must contain SingleChunkData objects");
+            SWIG_fail;
+        }
         reinterpret_cast<GENAPI_NAMESPACE::SingleChunkData_t*>($1)[i] = *reinterpret_cast<GENAPI_NAMESPACE::SingleChunkData_t*>(item);
         Py_DECREF(o);
     }
@@ -722,15 +704,27 @@ namespace GENICAM_NAMESPACE {
 %typemap(in) (GENAPI_NAMESPACE::SingleChunkDataStr_t *ChunkData, int64_t NumChunks) {
     if (!PySequence_Check($input)) {
         PyErr_SetString(PyExc_TypeError,"Expecting a sequence");
-        return NULL;
+        SWIG_fail;
     }
-    $1 = new GENAPI_NAMESPACE::SingleChunkDataStr_t[PySequence_Length($input)];
-    $2 = PySequence_Length($input);
-    for (int i =0; i < PySequence_Length($input); i++) {
+    Py_ssize_t length = PySequence_Length($input);
+    if (length < 0) {
+        SWIG_fail;
+    }
+    $1 = new GENAPI_NAMESPACE::SingleChunkDataStr_t[length];
+    $2 = length;
+    for (Py_ssize_t i = 0; i < length; i++) {
         PyObject *o = PySequence_GetItem($input,i);
-        // TODO: add more checking code here
-        void *item = 0 ;
-        SWIG_ConvertPtr(o, &item,SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkDataStr_t, 0 );
+        if (!o) {
+            delete[] $1;
+            SWIG_fail;
+        }
+        void *item = 0;
+        if (!SWIG_IsOK(SWIG_ConvertPtr(o, &item, SWIGTYPE_p_GENAPI_NAMESPACE__SingleChunkDataStr_t, 0)) || !item) {
+            Py_DECREF(o);
+            delete[] $1;
+            PyErr_SetString(PyExc_TypeError, "sequence must contain SingleChunkDataStr objects");
+            SWIG_fail;
+        }
         reinterpret_cast<GENAPI_NAMESPACE::SingleChunkDataStr_t*>($1)[i] = *reinterpret_cast<GENAPI_NAMESPACE::SingleChunkDataStr_t*>(item);
         Py_DECREF(o);
     }
@@ -894,6 +888,4 @@ namespace GENICAM_NAMESPACE {
 %define ADD_PROP_GETSET(class, name)
     %pythoncode %{ class ## .name = property(class ## .Get ## name,class ## .Set ## name) %}
 %enddef
-
-
 

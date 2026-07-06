@@ -27,25 +27,19 @@
 
     PyObject * GetMemoryView()
     {
-// need at least Python 3.3 for memory view
-%#if PY_VERSION_HEX >= 0x03030000
         return PyMemoryView_FromMemory(
             (char*)$self->GetBuffer(),
             $self->GetImageSize(),
             PyBUF_WRITE
         );
-%#else
-        PyErr_SetString(PyExc_RuntimeError, "memory view not available");
-        return NULL;
-%#endif
     }
 
     PyObject* AttachMemoryView(PyObject* object, Pylon::EPixelType pixelType, unsigned int width, unsigned int height, size_t paddingX) {
-%#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x030b0000
+%#if PYPYLON_HAS_PYBUFFER_PROTOCOL
         Py_buffer buffer;
         if (PyObject_GetBuffer(object, &buffer, PyBUF_SIMPLE) == -1) {
             PyErr_SetString(PyExc_RuntimeError, "Expected a buffer-compatible object");
-            Py_RETURN_FALSE;
+            return NULL;
         }
 
         // Call the existing C++ AttachUserBuffer method
@@ -88,10 +82,14 @@
             raise ValueError("Expected a memory view with contiguous ordering")
         result = _pylon.PylonImage_AttachMemoryView(self, memoryView, pixelType, width, height, paddingX)
         if result == False:
-          memoryViewBuffer = bytes(memoryView)
-          _pylon.PylonImage_AttachBytesObject(self, memoryViewBuffer, pixelType, width, height, paddingX)
-          self._memory_view_buffer = memoryViewBuffer # Hold buffer copy to reference to prevent garbage collection
-        self._memory_view = memoryView  # Hold the reference to prevent garbage collection
+            memoryViewBuffer = bytes(memoryView)
+            _pylon.PylonImage_AttachBytesObject(self, memoryViewBuffer, pixelType, width, height, paddingX)
+            # Stable ABI < 3.11 cannot use Py_buffer, so attach a private copy.
+            self._memory_view_buffer = memoryViewBuffer
+            self._memory_view = None
+        else:
+            self._memory_view = memoryView  # Hold the reference to prevent garbage collection.
+            self._memory_view_buffer = None
 
     def AttachBytesObject(self, object, pixelType, width, height, paddingX):
         if not isinstance(object, bytes):

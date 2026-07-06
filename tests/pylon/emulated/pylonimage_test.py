@@ -262,6 +262,38 @@ class PylonImageTestSuite(PylonEmuTestCase):
         image.AttachMemoryView(memoryview(buf), pylon.PixelType_Mono8, 64, 48, 0)
         self.assertTrue(image.IsUserBufferAttached())
 
+    def test_attach_memory_view_keeps_required_buffer_alive(self):
+        """AttachMemoryView keeps either the source view or a private stable-ABI copy alive."""
+        buf = bytearray(64 * 48)
+        memory_view = memoryview(buf)
+        image = pylon.PylonImage()
+
+        image.AttachMemoryView(memory_view, pylon.PixelType_Mono8, 64, 48, 0)
+        buf[0] = 123
+
+        if image._memory_view is memory_view:
+            self.assertIsNone(image._memory_view_buffer)
+            self.assertEqual(image.Buffer[0], 123)
+        else:
+            self.assertIsNone(image._memory_view)
+            self.assertIsInstance(image._memory_view_buffer, bytes)
+            self.assertEqual(image.Buffer[0], 0)
+
+        image.Release()
+        memory_view.release()
+
+    def test_get_array_zero_copy_raises_when_external_reference_is_held(self):
+        """GetArrayZeroCopy raises RuntimeError when an array reference escapes the context."""
+        image = _make_mono8_image()
+        with self.assertRaises(RuntimeError) as context_manager:
+            with image.GetArrayZeroCopy() as zero_copy_array:
+                external_reference = zero_copy_array  # noqa: F841
+        self.assertEqual(
+            str(context_manager.exception),
+            "Please remove any references to the array before leaving context manager scope!!!",
+        )
+        image.Release()
+
     # ------------------------------------------------------------------
     # ChangePixelType
     # ------------------------------------------------------------------
@@ -426,8 +458,8 @@ class PylonImageTestSuite(PylonEmuTestCase):
         with self.assertRaises(RuntimeError):
             image.AttachBytesObject("not bytes", pylon.PixelType_Mono8, 4, 4, 0)
 
-    def test_attach_array_holds_reference_and_shares_buffer(self):
-        """AttachArray() increments ref-count of the array and shares the buffer."""
+    def test_attach_array_keeps_buffer_alive(self):
+        """AttachArray() keeps valid buffer storage alive for zero-copy and copied fallback builds."""
         import numpy as np
         import sys
         image = pylon.PylonImage()
@@ -436,13 +468,20 @@ class PylonImageTestSuite(PylonEmuTestCase):
 
         ref_count_before = sys.getrefcount(array)
         image.AttachArray(array, pylon.PixelType_Mono8)
-        self.assertEqual(sys.getrefcount(array), ref_count_before + 1)
 
-        # Buffer is shared, not copied.
         self.assertEqual(image.Array[0, 0], 42)
+        array[0, 0] = 99
 
-        del image
-        self.assertEqual(sys.getrefcount(array), ref_count_before)
+        if image._memory_view is not None:
+            self.assertEqual(sys.getrefcount(array), ref_count_before + 1)
+            self.assertIsNone(image._memory_view_buffer)
+            self.assertEqual(image.Array[0, 0], 99)
+            del image
+            self.assertEqual(sys.getrefcount(array), ref_count_before)
+        else:
+            self.assertEqual(sys.getrefcount(array), ref_count_before)
+            self.assertIsInstance(image._memory_view_buffer, bytes)
+            self.assertEqual(image.Array[0, 0], 42)
 
     # ------------------------------------------------------------------
     # Load / Save / CanSaveWithoutConversion
@@ -558,7 +597,6 @@ class PylonImageTestSuite(PylonEmuTestCase):
 
     def test_get_array_zero_copy_shares_underlying_buffer(self):
         """GetArrayZeroCopy() yields an array that is a zero-copy view of the buffer."""
-        import numpy as np
         image = pylon.PylonImage()
         image.Load(_BARCODE_PNG)
         with image.GetArrayZeroCopy() as zero_copy_array:

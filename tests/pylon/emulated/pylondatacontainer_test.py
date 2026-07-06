@@ -320,6 +320,24 @@ class DataContainerTestSuite(PylonEmuTestCase):
         testee3.Release()
         testee1.Release()
 
+    def test_component_get_array_zero_copy_raises_when_external_reference_is_held(self):
+        """PylonDataComponent zero-copy arrays must not outlive the context manager."""
+        thisdir = os.path.dirname(__file__)
+        filename = os.path.join(thisdir, 'little_boxes.gendc')
+        container = pylon.PylonDataContainer(filename)
+        component = container.GetDataComponentByIndex(1)
+
+        with self.assertRaises(RuntimeError) as context_manager:
+            with component.GetArrayZeroCopy() as zero_copy_array:
+                external_reference = zero_copy_array  # noqa: F841
+        self.assertEqual(
+            str(context_manager.exception),
+            "Please remove any references to the array before leaving context manager scope!!!",
+        )
+
+        component.Release()
+        container.Release()
+
     def test_component_array_and_format_accessors(self):
         """Data, ImageFormat / GetImageFormat, and GetArray (default + raw) agree with each other and with the component metadata."""
         thisdir = os.path.dirname(__file__)

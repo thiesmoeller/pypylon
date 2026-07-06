@@ -30,8 +30,6 @@
 
     PyObject * GetMemoryView()
     {
-// need at least Python 3.3 for memory view
-%#if PY_VERSION_HEX >= 0x03030000
         if ($self->IsReadOnly())
         {
             return PyMemoryView_FromMemory(
@@ -48,10 +46,6 @@
                 PyBUF_WRITE
                 );
         }
-%#else
-        PyErr_SetString(PyExc_RuntimeError, "memory view not available");
-        return NULL;
-%#endif
     }
     
     PyObject * ToArray()
