@@ -657,6 +657,12 @@ class ImageFormatConverterTestSuite(PylonEmuTestCase):
                 with self.assertRaises(TypeError):
                     converter.Convert(bad)
 
+    def test_unpack_translates_cpp_exception_to_python_exception(self):
+        """_Unpack translates C++ invalid-argument exceptions to Python exceptions."""
+        grab_result = self._grab_one_mono8()
+        with self.assertRaises(genicam.InvalidArgumentException):
+            pylon.ImageFormatConverter._Unpack(grab_result)
+
     # ------------------------------------------------------------------
     # %extend ImageHasDestinationFormat: IImage / CGrabResultPtr overloads.
     # ------------------------------------------------------------------

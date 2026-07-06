@@ -208,6 +208,23 @@ void TranslateGenicamException(const GenericException* e)
 
 %}
 
+%exception {
+    try {
+        $action
+    } catch (const GENICAM_NAMESPACE::GenericException& e) {
+        TranslateGenicamException(&e);
+        SWIG_fail;
+    } catch (Swig::DirectorException &e) {
+        (void)e;
+        // PyErr is still set from the director call.
+        SWIG_fail;
+    } catch (const std::exception & e) {
+        SWIG_exception(SWIG_RuntimeError, (std::string("C++ std::exception: ") + e.what()).c_str());
+    } catch (...) {
+        SWIG_exception(SWIG_UnknownError, "C++ anonymous exception");
+    }
+}
+
 %init %{
 
     Pylon::PylonInitialize();
