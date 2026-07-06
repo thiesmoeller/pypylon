@@ -43,17 +43,6 @@
 %include <pylondataprocessing/Recipe.h>;
 
 %extend Pylon::DataProcessing::CRecipe {
-%pythoncode %{
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.Unload()
-        # Output observers and update observers are automatically unregistered when the recipe is unloaded,
-        # so we don't need to explicitly unregister them here.
-        self.UnregisterEventObserver()
-        return False
-%}
 
     void GetOutputNames2(StringList_t& result) const
     {
@@ -99,6 +88,102 @@
         Pylon::DataProcessing::CUpdate result = self->TriggerUpdate(inputCollection, timeoutMs, timeoutHandling, pObserver, userProvidedId);
         return result;
     }
+
+%pythoncode %{
+    def _observer_refs(self):
+        try:
+            return object.__getattribute__(self, "_pylondp_observer_refs")
+        except AttributeError:
+            refs = {
+                "output": {},
+                "event": {},
+                "update": {},
+            }
+            object.__setattr__(self, "_pylondp_observer_refs", refs)
+            return refs
+
+    def _clear_observer_refs(self):
+        refs = self._observer_refs()
+        refs["output"].clear()
+        refs["event"].clear()
+        refs["update"].clear()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.Unload()
+        # Output observers and update observers are automatically unregistered when the recipe is unloaded,
+        # so we don't need to explicitly unregister them here.
+        self.UnregisterEventObserver()
+        self._clear_observer_refs()
+        return False
+
+    def Load(self, *args):
+        return _pylondataprocessing.Recipe_Load(self, *args)
+
+    def Unload(self):
+        result = _pylondataprocessing.Recipe_Unload(self)
+        self._clear_observer_refs()
+        return result
+
+    def RegisterEventObserver(self, pObserver):
+        result = _pylondataprocessing.Recipe_RegisterEventObserver(self, pObserver)
+        refs = self._observer_refs()["event"]
+        refs.clear()
+        if pObserver is not None:
+            refs[id(pObserver)] = pObserver
+        return result
+
+    def UnregisterEventObserver(self):
+        result = _pylondataprocessing.Recipe_UnregisterEventObserver(self)
+        self._observer_refs()["event"].clear()
+        return result
+
+    def RegisterAllOutputsObserver(self, pObserver, mode, userProvidedId=0):
+        result = _pylondataprocessing.Recipe_RegisterAllOutputsObserver(
+            self, pObserver, mode, userProvidedId
+        )
+        refs = self._observer_refs()["output"]
+        if mode == pypylon.pylon.RegistrationMode_ReplaceAll or pObserver is None:
+            refs.clear()
+        if pObserver is not None:
+            refs[(id(pObserver), userProvidedId)] = pObserver
+        return result
+
+    def RegisterOutputObserver(self, outputFullNames, pObserver, mode, userProvidedId=0):
+        result = _pylondataprocessing.Recipe_RegisterOutputObserver(
+            self, outputFullNames, pObserver, mode, userProvidedId
+        )
+        refs = self._observer_refs()["output"]
+        if mode == pypylon.pylon.RegistrationMode_ReplaceAll or pObserver is None:
+            refs.clear()
+        if pObserver is not None:
+            refs[(id(pObserver), userProvidedId)] = pObserver
+        return result
+
+    def UnregisterOutputObserver(self, pObserver, userProvidedId=0):
+        result = _pylondataprocessing.Recipe_UnregisterOutputObserver(
+            self, pObserver, userProvidedId
+        )
+        if result:
+            self._observer_refs()["output"].pop((id(pObserver), userProvidedId), None)
+        return result
+
+    def TriggerUpdateAsync(self, inputCollection, pObserver=None, userProvidedId=0):
+        result = _pylondataprocessing.Recipe_TriggerUpdateAsync(
+            self, inputCollection, pObserver, userProvidedId
+        )
+        if pObserver is not None:
+            self._observer_refs()["update"][(id(pObserver), userProvidedId)] = pObserver
+        return result
+
+    def TriggerUpdate(self, inputCollection, timeoutMs, timeoutHandling=pypylon.pylon.TimeoutHandling_ThrowException, pObserver=None, userProvidedId=0):
+        result = _pylondataprocessing.Recipe_TriggerUpdate(
+            self, inputCollection, timeoutMs, timeoutHandling, pObserver, userProvidedId
+        )
+        if pObserver is not None:
+            self._observer_refs()["update"][(id(pObserver), userProvidedId)] = pObserver
+        return result
+%}
 }
-
-

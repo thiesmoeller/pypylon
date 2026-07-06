@@ -38,15 +38,6 @@
 %typemap(argout, noblock=1) const Pylon::DataProcessing::SSmartInstantCameraResultT<Pylon::CGrabResultPtr>& {};
 %typemap(freearg, noblock=1) const Pylon::DataProcessing::SSmartInstantCameraResultT<Pylon::CGrabResultPtr>& {};
 
-%pythonprepend Pylon::CInstantCamera::RegisterSmartResultEventHandler2 %{
-    if cleanupProcedure == pypylon.pylon.Cleanup_Delete:
-        if pSmartResultEventHandler:
-            pSmartResultEventHandler.__disown__()
-    elif cleanupProcedure == pypylon.pylon.Cleanup_None:
-        # should we increment the pyhon refcount here??
-        pass
-%}
-
 %template(SmartInstantCamera) Pylon::DataProcessing::CSmartInstantCameraT< Pylon::CInstantCamera, Pylon::DataProcessing::SSmartInstantCameraResultT<Pylon::CGrabResultPtr> >;
 
 
@@ -80,5 +71,36 @@
         Pylon::CParameter parameter = $self->GetParameters().Get(fullname);
         return parameter.IsValid() ? parameter.GetNode() : nullptr;
     }
-};
 
+    %pythoncode %{
+        def _smart_result_event_handler_refs(self):
+            try:
+                return object.__getattribute__(self, "_pylondp_smart_result_event_handler_refs")
+            except AttributeError:
+                refs = {}
+                object.__setattr__(self, "_pylondp_smart_result_event_handler_refs", refs)
+                return refs
+
+        def RegisterSmartResultEventHandler(self, pSmartResultEventHandler, mode, cleanupProcedure):
+            result = _pylondataprocessing.SmartInstantCamera_RegisterSmartResultEventHandler(
+                self, pSmartResultEventHandler, mode, cleanupProcedure
+            )
+            refs = self._smart_result_event_handler_refs()
+            if mode == pypylon.pylon.RegistrationMode_ReplaceAll or pSmartResultEventHandler is None:
+                refs.clear()
+            if pSmartResultEventHandler is not None:
+                if cleanupProcedure == pypylon.pylon.Cleanup_Delete:
+                    pSmartResultEventHandler.__disown__()
+                elif cleanupProcedure == pypylon.pylon.Cleanup_None:
+                    refs[id(pSmartResultEventHandler)] = pSmartResultEventHandler
+            return result
+
+        def DeregisterSmartResultEventHandler(self, pSmartResultEventHandler):
+            result = _pylondataprocessing.SmartInstantCamera_DeregisterSmartResultEventHandler(
+                self, pSmartResultEventHandler
+            )
+            if result:
+                self._smart_result_event_handler_refs().pop(id(pSmartResultEventHandler), None)
+            return result
+    %}
+};

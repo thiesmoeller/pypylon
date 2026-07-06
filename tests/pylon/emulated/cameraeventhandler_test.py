@@ -4,7 +4,9 @@ introduced by `src/pylon/CameraEventHandler.i`.
 """
 from pylonemutestcase import PylonEmuTestCase
 from pypylon import pylon
+import gc
 import unittest
+import weakref
 
 
 class TestCameraEventHandler(pylon.CameraEventHandler):
@@ -106,6 +108,21 @@ class CameraEventHandlerTestSuite(PylonEmuTestCase):
                 self.assertEqual(handler.registered_user_id, 1234)
             finally:
                 camera.DeregisterCameraEventHandler(handler, "Gain")
+
+    def test_cleanup_none_handler_is_kept_alive_by_camera(self):
+        """Cleanup_None camera event handlers stay alive while registered."""
+        handler = TestCameraEventHandler()
+        handler_ref = weakref.ref(handler)
+        with pylon.InstantCamera(self.get_camera_traits(), pylon.FirstFound) as camera:
+            camera.RegisterCameraEventHandler(
+                handler, "Gain", 1234, pylon.RegistrationMode_ReplaceAll, pylon.Cleanup_None
+            )
+            del handler
+            gc.collect()
+            self.assertIsNotNone(handler_ref())
+            camera.DeregisterCameraEventHandler(handler_ref(), "Gain")
+        gc.collect()
+        self.assertIsNone(handler_ref())
 
     # ------------------------------------------------------------------
     # OnCameraEventHandlerDeregistered

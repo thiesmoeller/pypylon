@@ -4,7 +4,9 @@ introduced by `src/pylon/ConfigurationEventHandler.i`.
 """
 from pylonemutestcase import PylonEmuTestCase
 from pypylon import pylon
+import gc
 import unittest
+import weakref
 
 
 class TestConfigurationEventHandler(pylon.ConfigurationEventHandler):
@@ -102,6 +104,19 @@ class ConfigurationEventHandlerTestSuite(PylonEmuTestCase):
         original = pylon.ConfigurationEventHandler()
         handler_copy = pylon.ConfigurationEventHandler(original)
         self.assertIsNotNone(handler_copy)
+
+    def test_cleanup_none_handler_is_kept_alive_by_camera(self):
+        """Cleanup_None configuration handlers stay alive while registered."""
+        handler = TestConfigurationEventHandler()
+        handler_ref = weakref.ref(handler)
+        with pylon.InstantCamera() as camera:
+            camera.RegisterConfiguration(handler, pylon.RegistrationMode_ReplaceAll, pylon.Cleanup_None)
+            del handler
+            gc.collect()
+            self.assertIsNotNone(handler_ref())
+            camera.DeregisterConfiguration(handler_ref())
+        gc.collect()
+        self.assertIsNone(handler_ref())
 
     # ------------------------------------------------------------------
     # OnAttach / OnAttached

@@ -3,8 +3,10 @@ This unit test checks all of the mapped pypylon API introduced by ImageEventHand
 """
 from pylonemutestcase import PylonEmuTestCase
 from pypylon import pylon
+import gc
 import threading
 import unittest
+import weakref
 
 
 class TestImageEventHandler(pylon.ImageEventHandler):
@@ -116,6 +118,19 @@ class ImageEventHandlerTestSuite(PylonEmuTestCase):
             finally:
                 camera.DeregisterImageEventHandler(handler)
 
+    def test_cleanup_none_handler_is_kept_alive_by_camera(self):
+        """Cleanup_None image event handlers stay alive while registered."""
+        handler = TestImageEventHandler()
+        handler_ref = weakref.ref(handler)
+        with pylon.InstantCamera() as camera:
+            camera.RegisterImageEventHandler(handler, pylon.RegistrationMode_ReplaceAll, pylon.Cleanup_None)
+            del handler
+            gc.collect()
+            self.assertIsNotNone(handler_ref())
+            camera.DeregisterImageEventHandler(handler_ref())
+        gc.collect()
+        self.assertIsNone(handler_ref())
+
     # ------------------------------------------------------------------
     # OnImageEventHandlerDeregistered
     # ------------------------------------------------------------------
@@ -172,4 +187,3 @@ class ImageEventHandlerTestSuite(PylonEmuTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

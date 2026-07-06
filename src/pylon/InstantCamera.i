@@ -160,32 +160,6 @@ namespace Pylon {
         return
 %}
 
-%pythonprepend Pylon::CInstantCamera::RegisterConfiguration %{
-    if cleanupProcedure == Cleanup_Delete:
-        if pConfigurator:
-            pConfigurator.__disown__()
-    elif cleanupProcedure == Cleanup_None:
-        # should we increment the pyhon refcount here??
-        pass
-%}
-%pythonprepend Pylon::CInstantCamera::RegisterImageEventHandler %{
-    if cleanupProcedure == Cleanup_Delete:
-        if pImageEventHandler:
-            pImageEventHandler.__disown__()
-    elif cleanupProcedure == Cleanup_None:
-        # should we increment the pyhon refcount here??
-        pass
-%}
-%pythonprepend Pylon::CInstantCamera::RegisterCameraEventHandler %{
-    assert(len(args) > 4)
-    if args[4] == Cleanup_Delete:
-        if args[0]:
-            args[0].__disown__()
-    elif args[4] == Cleanup_None:
-        # should we increment the pyhon refcount here??
-        pass
-%}
-
 %include <pylon/ECleanup.h>;
 %include <pylon/ERegistrationMode.h>;
 %include <pylon/ETimeoutHandling.h>;
@@ -242,3 +216,93 @@ namespace Pylon {
 
 %include <pylon/InstantCamera.h>;
 
+%extend Pylon::CInstantCamera {
+%pythoncode %{
+    def _event_handler_refs(self):
+        try:
+            return object.__getattribute__(self, "_pylon_event_handler_refs")
+        except AttributeError:
+            refs = {
+                "configuration": {},
+                "image": {},
+                "camera": {},
+            }
+            object.__setattr__(self, "_pylon_event_handler_refs", refs)
+            return refs
+
+    def _clear_event_handler_refs(self):
+        self._event_handler_refs()["configuration"].clear()
+        self._event_handler_refs()["image"].clear()
+        self._event_handler_refs()["camera"].clear()
+
+    def RegisterConfiguration(self, pConfigurator, mode, cleanupProcedure):
+        result = _pylon.InstantCamera_RegisterConfiguration(
+            self, pConfigurator, mode, cleanupProcedure
+        )
+        refs = self._event_handler_refs()["configuration"]
+        if mode == RegistrationMode_ReplaceAll or pConfigurator is None:
+            refs.clear()
+        if pConfigurator is not None:
+            if cleanupProcedure == Cleanup_Delete:
+                pConfigurator.__disown__()
+            elif cleanupProcedure == Cleanup_None:
+                refs[id(pConfigurator)] = pConfigurator
+        return result
+
+    def DeregisterConfiguration(self, pConfigurator):
+        result = _pylon.InstantCamera_DeregisterConfiguration(self, pConfigurator)
+        self._event_handler_refs()["configuration"].pop(id(pConfigurator), None)
+        return result
+
+    def RegisterImageEventHandler(self, pImageEventHandler, mode, cleanupProcedure):
+        result = _pylon.InstantCamera_RegisterImageEventHandler(
+            self, pImageEventHandler, mode, cleanupProcedure
+        )
+        refs = self._event_handler_refs()["image"]
+        if mode == RegistrationMode_ReplaceAll or pImageEventHandler is None:
+            refs.clear()
+        if pImageEventHandler is not None:
+            if cleanupProcedure == Cleanup_Delete:
+                pImageEventHandler.__disown__()
+            elif cleanupProcedure == Cleanup_None:
+                refs[id(pImageEventHandler)] = pImageEventHandler
+        return result
+
+    def DeregisterImageEventHandler(self, pImageEventHandler):
+        result = _pylon.InstantCamera_DeregisterImageEventHandler(
+            self, pImageEventHandler
+        )
+        if result:
+            self._event_handler_refs()["image"].pop(id(pImageEventHandler), None)
+        return result
+
+    def RegisterCameraEventHandler(self, pCameraEventHandler, nodeName, userProvidedId, mode, cleanupProcedure, *args):
+        result = _pylon.InstantCamera_RegisterCameraEventHandler(
+            self, pCameraEventHandler, nodeName, userProvidedId, mode, cleanupProcedure, *args
+        )
+        refs = self._event_handler_refs()["camera"]
+        if mode == RegistrationMode_ReplaceAll or pCameraEventHandler is None:
+            refs.clear()
+        if pCameraEventHandler is not None:
+            if cleanupProcedure == Cleanup_Delete:
+                pCameraEventHandler.__disown__()
+            elif cleanupProcedure == Cleanup_None:
+                refs[(id(pCameraEventHandler), nodeName)] = pCameraEventHandler
+        return result
+
+    def DeregisterCameraEventHandler(self, pCameraEventHandler, nodeName):
+        result = _pylon.InstantCamera_DeregisterCameraEventHandler(
+            self, pCameraEventHandler, nodeName
+        )
+        if result:
+            self._event_handler_refs()["camera"].pop(
+                (id(pCameraEventHandler), nodeName), None
+            )
+        return result
+
+    def DestroyDevice(self):
+        result = _pylon.InstantCamera_DestroyDevice(self)
+        self._clear_event_handler_refs()
+        return result
+%}
+}
