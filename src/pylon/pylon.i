@@ -378,6 +378,18 @@ def needs_numpy(func):
     }
 %enddef
 
+%define PYLON_NODE_TO_PARAMETER_OR_PLACEHOLDER(node_ptr, placeholder_path, out_item)
+    if (0 == node_ptr)
+    {
+        Pylon::CPlaceholderParameter *p = new Pylon::CPlaceholderParameter(placeholder_path);
+        out_item = SWIG_NewPointerObj(p, $descriptor(Pylon::CPlaceholderParameter*), SWIG_POINTER_OWN);
+    }
+    else
+    {
+        PYLON_NODE_TO_PARAMETER(node_ptr, out_item)
+    }
+%enddef
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Override the genicam INode* factory typemap so that GetNode() (and the other
@@ -402,24 +414,51 @@ def needs_numpy(func):
               GENAPI_NAMESPACE::INode* Pylon::NodeMapWrapper::GetNode
 {
     {
+        GENICAM_NAMESPACE::gcstring path;
         if (0 == $1)
         {
             // Node not found: create a PlaceholderParameter whose path is
             // "NodeMapTypeString/requestedNodeName" for diagnostic purposes.
             // arg1 is the first declared parameter of GetNode / GetNode2 (const char* pName).
-            GENICAM_NAMESPACE::gcstring path =
+            path =
                 (arg1 ? arg1->GetNodeMapTypeString() : GENICAM_NAMESPACE::gcstring()) +
                 GENICAM_NAMESPACE::gcstring("/") +
                 (arg2 ? *arg2 : GENICAM_NAMESPACE::gcstring());
-            Pylon::CPlaceholderParameter *p = new Pylon::CPlaceholderParameter(path);
-            $result = SWIG_NewPointerObj(p, $descriptor(Pylon::CPlaceholderParameter*), SWIG_POINTER_OWN);
         }
-        else
-        {
-            PYLON_NODE_TO_PARAMETER($1, $result)
-        }
+        PYLON_NODE_TO_PARAMETER_OR_PLACEHOLDER($1, path, $result)
     }
 }
+
+%typemap(out) GENAPI_NAMESPACE::INode* _pylon_ToParameterFromNode
+{
+    PYLON_NODE_TO_PARAMETER_OR_PLACEHOLDER($1, GENICAM_NAMESPACE::gcstring(), $result)
+}
+
+%typemap(out) GENAPI_NAMESPACE::IPort* _pylon_ToParameterFromNode
+{
+    if (0 == $1)
+    {
+        Pylon::CPlaceholderParameter *p = new Pylon::CPlaceholderParameter();
+        $result = SWIG_NewPointerObj(p, $descriptor(Pylon::CPlaceholderParameter*), SWIG_POINTER_OWN);
+    }
+    else
+    {
+        Pylon::CPortParameter *p = new Pylon::CPortParameter($1);
+        $result = SWIG_NewPointerObj(p, $descriptor(Pylon::CPortParameter*), SWIG_POINTER_OWN);
+    }
+}
+
+%inline %{
+GENAPI_NAMESPACE::INode* _pylon_ToParameterFromNode(GENAPI_NAMESPACE::INode* node)
+{
+    return node;
+}
+
+GENAPI_NAMESPACE::IPort* _pylon_ToParameterFromNode(GENAPI_NAMESPACE::IPort* port)
+{
+    return port;
+}
+%}
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -510,51 +549,12 @@ def ToParameter(val):
            The underlying INode is retrieved and dispatch continues as below.
 
     4. genicam.INode
-           Dispatched via GetPrincipalInterfaceType():
-               intfIInteger     -> IntegerParameter
-               intfIBoolean     -> BooleanParameter
-               intfICommand     -> CommandParameter
-               intfIFloat       -> FloatParameter
-               intfIString      -> StringParameter
-               intfIRegister    -> ArrayParameter
-               intfIEnumeration -> EnumParameter
-               intfIEnumEntry   -> EnumEntryParameter
-               intfICategory    -> CategoryParameter
-               intfIPort        -> PortParameter
-               any other type   -> Parameter  (base, wraps the node)
+           Dispatched by the same C++ typemap helper used by nodemap lookups.
 
     5. Any other value
            -> PlaceholderParameter()  (permanently-invalid sentinel, empty path)
     """
     from pypylon import genicam as _genicam
-
-    # ------------------------------------------------------------------ #
-    # Helper: map an INode* to the most specific Parameter subclass.      #
-    # Returns None when no specific mapping exists.                        #
-    # ------------------------------------------------------------------ #
-    def _node_to_specific(node):
-        t = node.GetPrincipalInterfaceType()
-        if t == _genicam.intfIInteger:
-            return IntegerParameter(node)
-        elif t == _genicam.intfIBoolean:
-            return BooleanParameter(node)
-        elif t == _genicam.intfICommand:
-            return CommandParameter(node)
-        elif t == _genicam.intfIFloat:
-            return FloatParameter(node)
-        elif t == _genicam.intfIString:
-            return StringParameter(node)
-        elif t == _genicam.intfIRegister:
-            return ArrayParameter(node)
-        elif t == _genicam.intfIEnumeration:
-            return EnumParameter(node)
-        elif t == _genicam.intfIEnumEntry:
-            return EnumEntryParameter(node)
-        elif t == _genicam.intfICategory:
-            return CategoryParameter(node)
-        elif t == _genicam.intfIPort:
-            return PortParameter(node)
-        return None  # no more-specific type available
 
     # 1. None -> permanently-invalid placeholder
     if val is None:
@@ -567,9 +567,7 @@ def ToParameter(val):
         if type(val) is Parameter:
             node = val.GetNode() if val.IsValid() else None
             if node is not None:
-                specific = _node_to_specific(node)
-                if specific is not None:
-                    return specific
+                return _pylon_ToParameterFromNode(node)
         return val
 
     # 3. genicam.IValue – unwrap to INode first
@@ -578,10 +576,9 @@ def ToParameter(val):
 
     # 4. genicam.INode – dispatch on interface type
     if isinstance(val, _genicam.INode):
-        specific = _node_to_specific(val)
-        return specific if specific is not None else Parameter(val)
+        return _pylon_ToParameterFromNode(val)
     if isinstance(val, _genicam.IPort):
-        return PortParameter(val)
+        return _pylon_ToParameterFromNode(val)
 
     # 5. Unrecognised type -> permanently-invalid placeholder
     return PlaceholderParameter()

@@ -544,15 +544,7 @@ Pylon::DataProcessing::CVariantContainer value
 %typemap(out) GENAPI_NAMESPACE::INode* Pylon::DataProcessing::CRecipe::GetParameter,
               GENAPI_NAMESPACE::INode* Pylon::DataProcessing::CSmartInstantCameraT< Pylon::CInstantCamera, Pylon::DataProcessing::SSmartInstantCameraResultT<Pylon::CGrabResultPtr> >::GetParameter
 {
-    if (0 == $1)
-    {
-        Pylon::CPlaceholderParameter *p = new Pylon::CPlaceholderParameter(arg2 ? *arg2 : GENICAM_NAMESPACE::gcstring());
-        $result = SWIG_NewPointerObj(p, $descriptor(Pylon::CPlaceholderParameter*), SWIG_POINTER_OWN);
-    }
-    else
-    {
-        PYLON_NODE_TO_PARAMETER($1, $result)
-    }
+    PYLON_NODE_TO_PARAMETER_OR_PLACEHOLDER($1, arg2 ? *arg2 : GENICAM_NAMESPACE::gcstring(), $result)
 }
 
 // The entire functionality of GenApi is placed in a namespace. The actual name
