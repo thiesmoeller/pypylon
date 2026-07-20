@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import platform
 from pathlib import Path
 from logging import info, warning, error
@@ -52,8 +53,18 @@ def prepare_for_limited_api(min_ver_str):
         return None, None
     return f"0x{min_maj:02x}{min_min:02x}0000", f"cp{min_maj}{min_min}"
 
+def is_free_threaded_python():
+    gil_disabled = sysconfig.get_config_var("Py_GIL_DISABLED")
+    return gil_disabled not in (None, 0, "0", "")
+
 MIN_PY_VER_FOR_LIMITED_API = "3.9" # some low value to prove that it works
-LIMIT_DEF, LIMIT_TAG = prepare_for_limited_api(MIN_PY_VER_FOR_LIMITED_API)
+FREE_THREADED_PYTHON = is_free_threaded_python()
+if FREE_THREADED_PYTHON:
+    # Free-threaded CPython currently has a separate ABI and does not support
+    # Py_LIMITED_API / abi3 wheels.
+    LIMIT_DEF, LIMIT_TAG = None, None
+else:
+    LIMIT_DEF, LIMIT_TAG = prepare_for_limited_api(MIN_PY_VER_FOR_LIMITED_API)
 
 ################################################################################
 
@@ -105,7 +116,7 @@ class BuildSupport(object):
         } [ (get_platform(), get_machinewidth()) ]
 
     # Compatible swig versions
-    SwigVersions = ["4.3.0", "4.3.1"]
+    SwigVersions = ["4.4.1", "4.4.0", "4.3.1", "4.3.0"]
     SwigOptions = [
         "-c++",
         "-Wextra",
@@ -1213,6 +1224,11 @@ if __name__ == "__main__":
 
         # start with fresh 'pypylon' and 'generated' dirs if not skipping swig
         bs.clean("skip" if args.skip_swig else "keep")
+
+        if FREE_THREADED_PYTHON:
+            bs.DefineMacros.append(("Py_GIL_DISABLED", "1"))
+            bs.DefineMacros.append(("SWIGPYTHON_NOGIL", "1"))
+            bs.SwigOptions.append("-DSWIGPYTHON_NOGIL")
 
         if LIMIT_DEF:
             bs.DefineMacros.append(("Py_LIMITED_API", LIMIT_DEF))
